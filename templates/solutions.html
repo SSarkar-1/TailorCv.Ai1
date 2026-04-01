@@ -9,17 +9,17 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
-<body>
+<body> 
 
     <header class="navbar">
         <div class="left">
             <div class="logo">
-                <a href="/"><img class="logo-text" src="/static/logo6.png" alt="tailorcv Home"></a>
+                <a href="#"><img class="logo-text" src="/static/logo6.png" alt="tailorcv Home"></a>
             </div>
             <nav class="nav-links">
-                <a href="/" class="nav-link">Home</a>
-                <a href="/solutions" class="nav-link active">Solutions</a>
-                <a href="/about" class="nav-link">About Us</a>
+                <a href="index.html" class="nav-link">Home</a>
+                <a href="solutions.html" class="nav-link active">Solutions</a>
+                <a href="aboutus.html" class="nav-link">About Us</a>
             </nav>
         </div>
     </header>
@@ -29,10 +29,11 @@
             <div class="solutions-header">
                 <h1 class="solutions-title">Optimize Your Resume</h1>
                 <p class="solutions-subtitle">
-                    Upload your resume and paste the job description to generate an optimized resume tailored for the role.
+                    Upload your resume and paste the job description to get instant analysis 
+                    and an optimized resume tailored for the role.
                 </p>
             </div>
-
+            
             <div class="solutions-content">
                 <div class="upload-section">
                     <div class="form-card">
@@ -52,11 +53,11 @@
 
                             <div class="form-group">
                                 <label for="job-description" class="form-label">Job Description</label>
-                                <textarea
-                                    id="job-description"
-                                    name="job_description"
-                                    class="form-textarea"
-                                    rows="10"
+                                <textarea 
+                                    id="job-description" 
+                                    name="job_description" 
+                                    class="form-textarea" 
+                                    rows="10" 
                                     placeholder="Paste the job description here..."
                                     required
                                 ></textarea>
@@ -65,14 +66,34 @@
                             <div class="form-actions">
                                 <button type="button" id="analyze-btn" class="btn btn-secondary">
                                     <span class="btn-text">Get ATS Score</span>
-                                    <span class="btn-loader" style="display: none;">...</span>
+                                    <span class="btn-loader" style="display: none;">⏳</span>
                                 </button>
+
                                 <button type="button" id="optimize-btn" class="btn btn-primary">
                                     <span class="btn-text">Optimize Resume</span>
-                                    <span class="btn-loader" style="display: none;">...</span>
+                                    <span class="btn-loader" style="display: none;">⏳</span>
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+
+                <div id="template-selection-section" class="results-card" style="display: none; margin-top: 2rem;">
+                    <div class="results-header">
+                        <h2 class="results-title">Select a Resume Template</h2>
+                    </div>
+                    <div class="results-content">
+                        <p style="text-align: center; margin-bottom: 1.5rem; color: #64748b;">
+                            Click on a preview to select your preferred layout.
+                        </p>
+                        
+                        <div class="templates-grid" id="templates-grid"></div>
+
+                        <div style="text-align: center; margin-top: 30px;">
+                            <button id="confirm-optimize-btn" class="btn btn-primary" style="max-width: 300px;">
+                                Confirm & Generate PDF
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -80,17 +101,19 @@
                     <div id="ats-results" class="results-card" style="display: none;">
                         <div class="results-header">
                             <h2 class="results-title">ATS Score Analysis</h2>
-                            <button class="close-btn" onclick="closeResults('ats-results')">x</button>
+                            <button class="close-btn" onclick="closeResults('ats-results')">×</button>
                         </div>
-                        <div id="ats-content" class="results-content"></div>
+                        <div id="ats-content" class="results-content">
+                            </div>
                     </div>
 
                     <div id="optimize-results" class="results-card" style="display: none;">
                         <div class="results-header">
                             <h2 class="results-title">Optimized Resume Ready</h2>
-                            <button class="close-btn" onclick="closeResults('optimize-results')">x</button>
+                            <button class="close-btn" onclick="closeResults('optimize-results')">×</button>
                         </div>
-                        <div id="optimize-content" class="results-content"></div>
+                        <div id="optimize-content" class="results-content">
+                            </div>
                     </div>
                 </div>
             </div>
@@ -106,8 +129,8 @@
                 </div>
                 <div class="footer-section">
                     <h4 class="footer-title">Quick Links</h4>
-                    <a href="/" class="footer-link">Home</a>
-                    <a href="/solutions" class="footer-link">Solutions</a>
+                    <a href="index.html" class="footer-link">Home</a>
+                    <a href="solutions.html" class="footer-link">Solutions</a>
                 </div>
             </div>
             <div class="footer-bottom">
@@ -116,6 +139,6 @@
         </div>
     </footer>
 
-    <script src="/static/main_new.js?v=20260330b"></script>
+    <script src="/static/main_new.js"></script>
 </body>
 </html>
