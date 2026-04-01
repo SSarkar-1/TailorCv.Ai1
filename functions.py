@@ -7,7 +7,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import re
 import json
+load_dotenv()
 
+client = OpenAI()
 
 def normalize_links(text):
     return re.sub(
@@ -396,146 +398,6 @@ def create_prompt(resume_string,jd_string):
         str: A formatted prompt string containing instructions for resume optimization"""
     
     return f"""
-Your objective is to generate a professional, compelling resume content according to the provided job description, maximizing interview chances by integrating best practices in content quality, keyword optimization, measurable achievements, and proper formatting.
-
-Rewrite the content resume to better match the job description and return in json.
-Only improve wording and keyword alignment
-
-IMPORTANT:
-You are NOT formatting a resume.
-You are ONLY returning structured content.
-You must preserve factual details already present in the resume such as dates, CGPA/SGPA, percentages, marks, locations, and links.
-Do not remove or rewrite those details unless the resume itself clearly contains an error.
-For every section, prefer copying factual values from the original resume verbatim and only improve wording around them.
-
-### OUTPUT RULES (MANDATORY)
-- Output **ONLY valid JSON**
-- No explanations, no markdown, no extra text
-
-Guidelines to Follow:
-1)Keyword and Skill Optimization:
-Rule01:If a tool, framework or skill doesn't match the ones mentioned in the Job description but a similar skill is mentioned, replace the tool/skill/framework with that keyword to match the JD. For example, if Tableau is mentioned but the requirement asks for PowerBI, replace it with PowerBI, if . Be ethical, don't replace if it is not logical.
-
-Analyze the job description and identify relevant keywords (hard and soft skills).
-Match as much as possible of the job description’s keywords following the rule above to align with applicant tracking systems (ATS).
-Prioritize industry-relevant hard skills and soft skills in dedicated sections and throughout bullet points.
-
-Incorporate Measurable Metrics:
-Quantify achievements using the XYZ formula if the user has put such quantifications but not formatted it if user has not put anything quantifyable don't do it: Accomplished X, measured by Y, by doing Z.
-
-Include as many  measurable results as possible to clearly demonstrate impact.
-Don't use vague statements; use metrics to highlight value and effectiveness.
-
-
-Content Quality and Language:
-Eliminate buzzwords, clichés, and pronouns (e.g., “I,” “me,” “my”).
-Use action-oriented, impactful language to emphasize accomplishments over duties.
-Replace generic phrases with specific examples that showcase expertise and success.
-Focus on selling professional experience, skills, and results, not merely summarizing past roles.
-
-Additional Instructions:
-Keyword Optimize and be specific for each section (Professional Summary, Experience, Skills, Education) to reflect relevance to the job.
-Ensure consistent formatting, professional fonts
-Use concise bullet points, each starting with a strong action verb.
-Preserve all existing links from the resume exactly when they exist. Do not remove project, GitHub, LinkedIn, portfolio, or other URLs.
-If a project has a GitHub/repository/demo/live link in the original resume, keep it in the output using `github_link`, `url`, or `links`.
-Preserve all original date ranges exactly whenever they are present in experience, projects, education, certifications, extracurriculars, and publications.
-Preserve education scores exactly whenever they are present, including values like CGPA, SGPA, GPA, percentage, marks, and rank.
-If the original resume contains a field value and the job description does not conflict with it, keep that original value.
-Never leave `dates`, `score`, `github_link`, `url`, `links`, `linkedin`, `github`, `portfolio`, or `leetcode` blank if that value exists in the original resume.
-When education contains CGPA/SGPA/percentage/marks, place it in `score` exactly as written.
-When a project title line contains tools or stack details, place them in `subtitle`.
-
-Follow this EXACT schema
-
-{{
-  "name": "",
-
-  "contact": {{
-    "email": "",
-    "phone": "",
-    "address": "",
-    "linkedin": "",
-    "github": "",
-    "portfolio": "",
-    "kaggle": "",
-    "leetcode": "",
-    "codeforces": "",
-    "codechef": "",
-    "google_scholar": ""
-  }},
-
-  "summary": "",
-
-  "experience": [
-    {{
-      "title": "",
-      "company": "",
-      "dates": "",
-      "location": "",
-      "bullets": []
-    }}
-  ],
-
-  "projects": [
-    {{
-      "name": "",
-      "dates": "",
-      "subtitle": "",
-      "github_link": "",
-      "url": "",
-      "links": [
-        {{
-          "label": "",
-          "url": ""
-        }}
-      ],
-      "bullets": []
-    }}
-  ],
-
-  "skills": [],
-
-  "education": [
-    {{
-      "degree": "",
-      "school": "",
-      "year": "",
-      "score": "",
-      "links":""
-    }}
-  ],
-
-  "certifications": [
-    {{
-      "name": "",
-      "issuer": "",
-      "year": "",
-      "url":""
-    }}
-  ],
-
-  "achievements": [],
-
-  "extracurriculars": [
-    {{
-      "role": "",
-      "organization": "",
-      "dates": "",
-      "bullets": [],
-      "url": ""
-    }}
-  ],
-
-  "publications": [
-    {{
-      "title": "",
-      "publisher": "",
-      "year": "",
-      "url": ""
-    }}
-  ]
-}}
 
 My Resume:
 {resume_string}
@@ -543,7 +405,7 @@ Job Description:
 {jd_string}
 
 """
-def get_resume_response(prompt,model="gpt-4o-mini",temperature: float = 0.1):
+def get_resume_response(prompt,model="gpt-4o-mini",temperature: float = 0):
     """
     Sends a resume optimization prompt to OpenAI's API and returns the optimized resume response.
 
@@ -565,14 +427,150 @@ def get_resume_response(prompt,model="gpt-4o-mini",temperature: float = 0.1):
         OpenAIError: If there's an issue with the API call
     """
     #Setting up openAI client
-    client = _build_openai_client()
+    
+    system_prompt='''Your objective is to generate a professional, resume content according to the provided job description, maximizing interview chances by integrating best practices in content quality, keyword optimization, measurable achievements, and proper formatting.
 
+    Rewrite the content resume to better match the job description and return in json.
+    Only improve wording and keyword alignment
+
+    IMPORTANT:
+    You are NOT formatting a resume.
+    You are ONLY returning structured content.
+    You must preserve factual details already present in the resume such as dates, CGPA/SGPA, percentages, marks, locations, and links.
+    Do not remove or rewrite those details unless the resume itself clearly contains an error.
+    For every section, prefer copying factual values from the original resume verbatim and only improve wording around them.
+
+    ### OUTPUT RULES (MANDATORY)
+    - Output **ONLY valid JSON**
+    - No explanations, no markdown, no extra text
+
+    Guidelines to Follow:
+    1)Keyword and Skill Optimization:
+    Rule01:If a tool, framework or skill doesn't match the ones mentioned in the Job description but a similar skill is mentioned, replace the tool/skill/framework with that keyword to match the JD. For example, if Tableau is mentioned but the requirement asks for PowerBI, replace it with PowerBI.Be ethical, don't replace if it is not logical.
+
+    Analyze the job description and identify relevant keywords (hard and soft skills).
+    Match as much as possible of the job description’s keywords following the rule above to align with applicant tracking systems (ATS).
+    Prioritize industry-relevant hard skills and soft skills in dedicated sections and throughout bullet points.
+
+    Incorporate Measurable Metrics:
+    Quantify achievements using the XYZ formula if the user has put such quantifications but not formatted it if user has not put anything quantifyable don't do it: Accomplished X, measured by Y, by doing Z.
+
+    Include as many  measurable results as possible to clearly demonstrate impact.
+    Don't use vague statements; use metrics to highlight value and effectiveness.
+
+    Content Quality and Language:
+    Eliminate buzzwords, clichés, and pronouns (e.g., “I,” “me,” “my”).
+    Use action-oriented, impactful language to emphasize accomplishments over duties.
+    Replace generic phrases with specific examples that showcase expertise and success.
+    Focus on selling professional experience, skills, and results, not merely summarizing past roles.
+
+    Additional Instructions:
+    Preserve all existing links from the resume exactly when they exist. Do not remove project, GitHub, LinkedIn, portfolio, or other URLs.
+    If a project has a GitHub/repository/demo/live link in the original resume, keep it in the output using `github_link`, `url`, or `links`.
+    Preserve all original date ranges exactly whenever they are present in experience, projects, education, certifications, extracurriculars, and publications.
+    Preserve education scores exactly whenever they are present, including values like CGPA, SGPA, GPA, percentage, marks, and rank.
+    If the original resume contains a field value and the job description does not conflict with it, keep that original value.
+    Never leave `dates`, `score`, `github_link`, `url`, `links`, `linkedin`, `github`, `portfolio`, or `leetcode` blank if that value exists in the original resume.
+    When education contains CGPA/SGPA/percentage/marks, place it in `score` exactly as written.
+    When a project title line contains tools or stack details, place them in `subtitle`.
+
+    Follow this EXACT schema
+
+    {{
+    "name": "",
+
+    "contact": {{
+        "email": "",
+        "phone": "",
+        "address": "",
+        "linkedin": "",
+        "github": "",
+        "portfolio": "",
+        "kaggle": "",
+        "leetcode": "",
+        "codeforces": "",
+        "codechef": "",
+        "google_scholar": ""
+    }},
+
+    "summary": "",
+
+    "experience": [
+        {{
+        "title": "",
+        "company": "",
+        "dates": "",
+        "location": "",
+        "bullets": []
+        }}
+    ],
+
+    "projects": [
+        {{
+        "name": "",
+        "dates": "",
+        "subtitle": "",
+        "github_link": "",
+        "url": "",
+        "links": [
+            {{
+            "label": "",
+            "url": ""
+            }}
+        ],
+        "bullets": []
+        }}
+    ],
+
+    "skills": [],
+
+    "education": [
+        {{
+        "degree": "",
+        "school": "",
+        "year": "",
+        "score": "",
+        "links":""
+        }}
+    ],
+
+    "certifications": [
+        {{
+        "name": "",
+        "issuer": "",
+        "year": "",
+        "url":""
+        }}
+    ],
+
+    "achievements": [],
+
+    "extracurriculars": [
+        {{
+        "role": "",
+        "organization": "",
+        "dates": "",
+        "bullets": [],
+        "url": ""
+        }}
+    ],
+
+    "publications": [
+        {{
+        "title": "",
+        "publisher": "",
+        "year": "",
+        "url": ""
+        }}
+    ]
+    }}
+    '''
     #Make call
     try:
         response=client.chat.completions.create(model=model,
                                                 response_format={"type": "json_object"},
                                                 messages=[
-                                                    {'role':'system',"content":'Expert resume writer and reviewer'},
+                                                    {'role':'system',"content":system_prompt},
                                                     {'role':'user','content':prompt}
                                                 ],temperature=temperature)
     except Exception as exc:
@@ -608,7 +606,7 @@ def ats_scoring(resume_string, jd_string):
                   4) Does the resume have unessacery sections like extracurriculars, hobbies, interests
     Be strict, realistic, and recruiter-focused.
     Do NOT assume or hallucinate skills or experience not explicitly stated.
-
+    
     ### SCORING
     - Compute a Match Rate between 0 and 100
     - Weighting:

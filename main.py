@@ -222,14 +222,48 @@ def extract_project_links_from_pdf(pdf_path: str, project_names: list[str]) -> d
     return result
 
 
-def save_uploaded_pdf(file: UploadFile) -> str:
+def save_uploaded_pdf(file: UploadFile) -> tuple[str, str]:
     filename = file.filename or ""
     if not filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted")
 
     file_ext = filename.rsplit(".", 1)[-1].lower()
     file_name = token_hex(10)
-    return os.path.join(uploads_dir, f"{file_name}.{file_ext}")
+    return os.path.join(uploads_dir, f"{file_name}.{file_ext}"), file_name
+
+
+def get_upload_metadata_path(upload_id: str) -> str:
+    return os.path.join(uploads_dir, f"{upload_id}.meta.json")
+
+
+def save_uploaded_resume_metadata(
+    upload_id: str,
+    file_path: str,
+    resume_string: str,
+    normalized_resume_string: str,
+    extracted_links_data,
+    mapped_links_data,
+    project_link_map_data,
+) -> None:
+    metadata = {
+        "upload_id": upload_id,
+        "file_path": file_path,
+        "resume_string": resume_string,
+        "normalized_resume_string": normalized_resume_string,
+        "extracted_links": extracted_links_data,
+        "mapped_links": mapped_links_data,
+        "project_link_map": project_link_map_data,
+    }
+    with open(get_upload_metadata_path(upload_id), "w", encoding="utf-8") as f:
+        json.dump(metadata, f)
+
+
+def load_uploaded_resume_metadata(upload_id: str) -> dict:
+    metadata_path = get_upload_metadata_path(upload_id)
+    if not os.path.exists(metadata_path):
+        raise HTTPException(status_code=404, detail="Uploaded resume metadata not found")
+    with open(metadata_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 def normalize_list_of_strings(items):
@@ -768,24 +802,88 @@ async def about_page(request: Request):
     return templates.TemplateResponse(request, "aboutus.html")
 
 
-@app.post("/get-optimised-resume")
-async def upload_resume(request: Request, jd_string: str, file: UploadFile = File(...), template_id: int = 1, style_id: int = 1):
-    """Upload a resume PDF file and JD with selected template and style"""
+@app.post("/upload-resume")
+async def upload_resume_file(file: UploadFile = File(...)):
+    """Upload resume PDF, extract text, and precompute resume metadata."""
     file_path = None
+    upload_id = None
     try:
-        file_path = save_uploaded_pdf(file)
+        file_path, upload_id = save_uploaded_pdf(file)
+        content = await file.read()
         with open(file_path, "wb") as f:
-            content = await file.read()
             f.write(content)
 
         resume_string = extract_pdf_text(file_path)
-        # Try to recover URLs that might be lost behind PDF hyperlink icons.
         normalized_resume_string = normalize_links(resume_string)
-        # IMPORTANT: Only consider URLs from the Projects section, otherwise contact links
-        # (gmail/leetcode/linkedin) get incorrectly attached to projects.
-        extracted_links = extract_project_links(normalized_resume_string)
-        mapped_links = map_project_demo_links(normalized_resume_string)
-        project_link_map = extract_project_link_map(normalized_resume_string)
+        extracted_links_data = extract_project_links(normalized_resume_string)
+        mapped_links_data = map_project_demo_links(normalized_resume_string)
+        project_link_map_data = extract_project_link_map(normalized_resume_string)
+
+        save_uploaded_resume_metadata(
+            upload_id,
+            file_path,
+            resume_string,
+            normalized_resume_string,
+            extracted_links_data,
+            mapped_links_data,
+            project_link_map_data,
+        )
+
+        return {"success": True, "upload_id": upload_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        if file_path and os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail=f"Failed to upload resume: {str(e)}")
+
+
+@app.post("/get-optimised-resume")
+async def upload_resume(
+    request: Request,
+    jd_string: str,
+    upload_id: str | None = None,
+    file: UploadFile | None = File(None),
+    template_id: int = 1,
+    style_id: int = 1,
+):
+    """Optimize a resume using a stored upload_id or a new PDF upload."""
+    file_path = None
+    resume_string = ""
+    normalized_resume_string = ""
+    extracted_links = []
+    mapped_links = []
+    project_link_map = {}
+    cleanup_file = False
+
+    try:
+        if upload_id:
+            metadata = load_uploaded_resume_metadata(upload_id)
+            file_path = metadata.get("file_path")
+            if not file_path or not os.path.exists(file_path):
+                raise HTTPException(status_code=404, detail="Uploaded resume file not found")
+            resume_string = str(metadata.get("resume_string", ""))
+            normalized_resume_string = str(metadata.get("normalized_resume_string", ""))
+            extracted_links = metadata.get("extracted_links", [])
+            mapped_links = metadata.get("mapped_links", [])
+            project_link_map = metadata.get("project_link_map", {})
+        elif file:
+            file_path, _ = save_uploaded_pdf(file)
+            cleanup_file = True
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+
+            resume_string = extract_pdf_text(file_path)
+            # Try to recover URLs that might be lost behind PDF hyperlink icons.
+            normalized_resume_string = normalize_links(resume_string)
+            # IMPORTANT: Only consider URLs from the Projects section, otherwise contact links
+            # (gmail/leetcode/linkedin) get incorrectly attached to projects.
+            extracted_links = extract_project_links(normalized_resume_string)
+            mapped_links = map_project_demo_links(normalized_resume_string)
+            project_link_map = extract_project_link_map(normalized_resume_string)
+        else:
+            raise HTTPException(status_code=400, detail="No resume file uploaded and no upload_id provided")
 
         prompt = create_prompt(resume_string, jd_string)
 
@@ -913,7 +1011,7 @@ async def upload_resume(request: Request, jd_string: str, file: UploadFile = Fil
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
     finally:
-        if file_path and os.path.exists(file_path):
+        if cleanup_file and file_path and os.path.exists(file_path):
             os.remove(file_path)
 
 @app.post("/get-ats-score")
@@ -921,7 +1019,7 @@ async def get_score(jd_string: str, file: UploadFile = File(...)):
     """Upload a resume PDF file and JD"""
     file_path = None
     try:
-        file_path = save_uploaded_pdf(file)
+        file_path, _ = save_uploaded_pdf(file)
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)

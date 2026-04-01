@@ -1,6 +1,9 @@
 // Global state
 let selectedTemplate = null;
 let selectedStyle = 1; // Default to style 1 (Modern)
+let uploadedResumeId = null;
+let uploadedResumeFileKey = null;
+let uploadInProgress = false;
 
 // Template and Style Options
 const templates = [
@@ -17,6 +20,29 @@ const styles = [
     { id: 3, name: 'Clean', color: '#059669' }
 ];
 
+async function uploadResumeFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/upload-resume', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || 'Failed to upload resume');
+        }
+
+        const data = await response.json();
+        uploadedResumeId = data.upload_id || null;
+    } catch (error) {
+        console.error('Resume upload failed:', error);
+        uploadedResumeId = null;
+    }
+}
+
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     // File upload handler
@@ -26,9 +52,21 @@ document.addEventListener('DOMContentLoaded', function() {
     if (fileInput && fileName) {
         fileInput.addEventListener('change', function(e) {
             if (e.target.files.length > 0) {
-                fileName.textContent = e.target.files[0].name;
+                const file = e.target.files[0];
+                const fileKey = `${file.name}:${file.size}:${file.lastModified}`;
+                fileName.textContent = file.name;
+                if (uploadedResumeFileKey !== fileKey) {
+                    uploadedResumeFileKey = fileKey;
+                    uploadedResumeId = null;
+                    uploadInProgress = true;
+                    uploadResumeFile(file).finally(() => {
+                        uploadInProgress = false;
+                    });
+                }
             } else {
                 fileName.textContent = 'No file chosen';
+                uploadedResumeId = null;
+                uploadedResumeFileKey = null;
             }
         });
     }
@@ -207,10 +245,21 @@ async function handleResumeOptimization() {
     const styleId = selectedStyle; 
 
     try {
-        const response = await fetch(`/get-optimised-resume?jd_string=${jdString}&template_id=${templateId}&style_id=${styleId}`, {
-            method: 'POST',
-            body: formData
-        });
+        if (uploadInProgress) {
+            alert('Please wait for the resume upload to finish before optimizing.');
+            return;
+        }
+
+        let requestUrl = `/get-optimised-resume?jd_string=${jdString}&template_id=${templateId}&style_id=${styleId}`;
+        let requestOptions = { method: 'POST' };
+
+        if (uploadedResumeId && uploadedResumeFileKey === `${fileInput.files[0].name}:${fileInput.files[0].size}:${fileInput.files[0].lastModified}`) {
+            requestUrl += `&upload_id=${encodeURIComponent(uploadedResumeId)}`;
+        } else {
+            requestOptions.body = formData;
+        }
+
+        const response = await fetch(requestUrl, requestOptions);
 
         if (!response.ok) throw new Error('Optimization failed');
 
