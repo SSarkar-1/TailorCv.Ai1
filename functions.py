@@ -713,8 +713,8 @@ def ats_scoring(resume_string, jd_string):
     ]} '''
     prompt = base_prompt + "\n" + json_schema
     model="gpt-4o-mini"
-    temperature=0.1
-    client = _build_openai_client()
+    temperature=0
+    # client = _build_openai_client()
 
     #Make call
     try:

@@ -1,3 +1,4 @@
+import io
 import json
 import os
 from secrets import token_hex
@@ -9,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from weasyprint import HTML
 from functions import (
     ats_scoring,
     create_prompt,
@@ -53,19 +55,62 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 templates = Jinja2Templates(directory=templates_dir)
 
 
-def extract_pdf_text(path: str) -> str:
+def _open_pdf_source(path_or_bytes: str | bytes):
+    if isinstance(path_or_bytes, (bytes, bytearray)):
+        return io.BytesIO(path_or_bytes)
+    return path_or_bytes
+
+
+def _build_pdf_line_boxes(pdf) -> dict[int, list[dict]]:
+    line_boxes: dict[int, list[dict]] = {}
+    for page_idx, page in enumerate(pdf.pages):
+        words = page.extract_words(use_text_flow=True, keep_blank_chars=False) or []
+        lines: list[dict] = []
+        for w in words:
+            text = str(w.get("text", "")).strip()
+            if not text:
+                continue
+            top = float(w.get("top", 0.0))
+            bottom = float(w.get("bottom", 0.0))
+            x0 = float(w.get("x0", 0.0))
+            x1 = float(w.get("x1", 0.0))
+
+            placed = False
+            for ln in lines:
+                if abs(top - ln["top"]) <= 2.5:
+                    ln["text"] = (ln["text"] + " " + text).strip()
+                    ln["x0"] = min(ln["x0"], x0)
+                    ln["x1"] = max(ln["x1"], x1)
+                    ln["top"] = min(ln["top"], top)
+                    ln["bottom"] = max(ln["bottom"], bottom)
+                    placed = True
+                    break
+            if not placed:
+                lines.append({"text": text, "x0": x0, "x1": x1, "top": top, "bottom": bottom})
+
+        line_boxes[page_idx] = lines
+    return line_boxes
+
+
+def extract_pdf_text_and_line_boxes(path_or_bytes: str | bytes) -> tuple[str, dict[int, list[dict]]]:
     text = ""
-    with pdfplumber.open(path) as pdf:
-        for page in pdf.pages:
+    line_boxes: dict[int, list[dict]] = {}
+    with pdfplumber.open(_open_pdf_source(path_or_bytes)) as pdf:
+        for page_idx, page in enumerate(pdf.pages):
             text += (page.extract_text() or "") + "\n"
-    return text
+        line_boxes = _build_pdf_line_boxes(pdf)
+    return text, line_boxes
+
+
+def extract_pdf_text(path_or_bytes: str | bytes) -> str:
+    return extract_pdf_text_and_line_boxes(path_or_bytes)[0]
 
 
 def _normalize_key(text: str) -> str:
     return "".join(ch.lower() for ch in str(text or "") if ch.isalnum())
 
 
-def extract_project_links_from_pdf(pdf_path: str, project_names: list[str]) -> dict[str, list[tuple[str, str]]]:
+def extract_project_links_from_pdf(pdf_path: str | bytes, project_names: list[str], line_boxes: dict[int, list[dict]] | None = None) -> dict[str, list[tuple[str, str]]]:
     """
     Extract *clickable* link annotations (URIs) from the PDF and map them to the nearest
     project name based on page text proximity. This is far more reliable than trying
@@ -92,39 +137,12 @@ def extract_project_links_from_pdf(pdf_path: str, project_names: list[str]) -> d
                 return norm_to_name[nn]
         return None
 
-    # Build line boxes using pdfplumber so we can locate nearby text for each link annotation.
-    line_boxes: dict[int, list[dict]] = {}
-    with pdfplumber.open(pdf_path) as pdf:
-        for page_idx, page in enumerate(pdf.pages):
-            words = page.extract_words(use_text_flow=True, keep_blank_chars=False) or []
-            # Group words into lines by y position (tolerant grouping).
-            lines: list[dict] = []
-            for w in words:
-                text = str(w.get("text", "")).strip()
-                if not text:
-                    continue
-                top = float(w.get("top", 0.0))
-                bottom = float(w.get("bottom", 0.0))
-                x0 = float(w.get("x0", 0.0))
-                x1 = float(w.get("x1", 0.0))
+    pdf_source = _open_pdf_source(pdf_path)
+    if line_boxes is None:
+        with pdfplumber.open(pdf_source) as pdf:
+            line_boxes = _build_pdf_line_boxes(pdf)
 
-                placed = False
-                for ln in lines:
-                    # Same line if vertical overlap close enough
-                    if abs(top - ln["top"]) <= 2.5:
-                        ln["text"] = (ln["text"] + " " + text).strip()
-                        ln["x0"] = min(ln["x0"], x0)
-                        ln["x1"] = max(ln["x1"], x1)
-                        ln["top"] = min(ln["top"], top)
-                        ln["bottom"] = max(ln["bottom"], bottom)
-                        placed = True
-                        break
-                if not placed:
-                    lines.append({"text": text, "x0": x0, "x1": x1, "top": top, "bottom": bottom})
-
-            line_boxes[page_idx] = lines
-
-    reader = PdfReader(pdf_path)
+    reader = PdfReader(_open_pdf_source(pdf_path))
     result: dict[str, list[tuple[str, str]]] = {}
 
     for page_idx, page in enumerate(reader.pages):
@@ -264,6 +282,28 @@ def load_uploaded_resume_metadata(upload_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Uploaded resume metadata not found")
     with open(metadata_path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def delete_uploaded_resume_data(upload_id: str) -> None:
+    metadata_path = get_upload_metadata_path(upload_id)
+    file_path = None
+    if os.path.exists(metadata_path):
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+                file_path = metadata.get("file_path")
+        except Exception:
+            file_path = None
+        try:
+            os.remove(metadata_path)
+        except OSError:
+            pass
+
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
 
 
 def normalize_list_of_strings(items):
@@ -813,7 +853,7 @@ async def upload_resume_file(file: UploadFile = File(...)):
         with open(file_path, "wb") as f:
             f.write(content)
 
-        resume_string = extract_pdf_text(file_path)
+        resume_string = extract_pdf_text(content)
         normalized_resume_string = normalize_links(resume_string)
         extracted_links_data = extract_project_links(normalized_resume_string)
         mapped_links_data = map_project_demo_links(normalized_resume_string)
@@ -855,9 +895,11 @@ async def upload_resume(
     mapped_links = []
     project_link_map = {}
     cleanup_file = False
+    cleanup_upload_id = False
 
     try:
         if upload_id:
+            cleanup_upload_id = True
             metadata = load_uploaded_resume_metadata(upload_id)
             file_path = metadata.get("file_path")
             if not file_path or not os.path.exists(file_path):
@@ -874,14 +916,14 @@ async def upload_resume(
                 content = await file.read()
                 f.write(content)
 
-            resume_string = extract_pdf_text(file_path)
+            resume_string, line_boxes = extract_pdf_text_and_line_boxes(content)
             # Try to recover URLs that might be lost behind PDF hyperlink icons.
             normalized_resume_string = normalize_links(resume_string)
             # IMPORTANT: Only consider URLs from the Projects section, otherwise contact links
             # (gmail/leetcode/linkedin) get incorrectly attached to projects.
             extracted_links = extract_project_links(normalized_resume_string)
             mapped_links = map_project_demo_links(normalized_resume_string)
-            project_link_map = extract_project_link_map(normalized_resume_string)
+            # project_link_map = extract_project_link_map(normalized_resume_string)
         else:
             raise HTTPException(status_code=400, detail="No resume file uploaded and no upload_id provided")
 
@@ -896,11 +938,13 @@ async def upload_resume(
         parsed = parse_ai_json_response(response_string)
         # Extract *actual clickable* PDF hyperlinks and map them to project names.
         pdf_project_link_map = extract_project_links_from_pdf(
-            file_path,
+            content if file is not None else file_path,
             [p.get("name") for p in (parsed.get("projects") or []) if isinstance(p, dict)],
+            line_boxes=line_boxes if 'line_boxes' in locals() else None,
         )
         # Prefer PDF annotation mapping; fallback to text-based project mapping if needed.
-        effective_map = pdf_project_link_map or project_link_map
+        # effective_map = pdf_project_link_map or project_link_map
+        effective_map = pdf_project_link_map 
         parsed = inject_links(parsed, effective_map, mapped_links)
 
         # Basic validation: ensure some expected keys are present
@@ -976,7 +1020,7 @@ async def upload_resume(
 
         output_pdf_file = os.path.join(resumes_dir, "optimized_resume.pdf")
         try:
-            from weasyprint import HTML
+            
 
             # If using custom template, CSS is already inlined
             if not use_default_template and template_content:
@@ -1013,6 +1057,8 @@ async def upload_resume(
     finally:
         if cleanup_file and file_path and os.path.exists(file_path):
             os.remove(file_path)
+        if cleanup_upload_id and upload_id:
+            delete_uploaded_resume_data(upload_id)
 
 @app.post("/get-ats-score")
 async def get_score(jd_string: str, file: UploadFile = File(...)):
@@ -1023,7 +1069,7 @@ async def get_score(jd_string: str, file: UploadFile = File(...)):
         with open(file_path, "wb") as f:
             content = await file.read()
             f.write(content)
-        resume_string = extract_pdf_text(file_path)
+        resume_string = extract_pdf_text(content)
         ats_score = ats_scoring(resume_string, jd_string)
         return parse_ai_json_response(ats_score)
     except HTTPException:
