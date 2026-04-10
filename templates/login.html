@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% include "_google_analytics.html" %}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: url('/static/back5.jpg') center/cover no-repeat fixed;
+    }
+
+    .container {
+      width: min(380px, 92vw);
+      background: rgba(255, 255, 255, 0.98);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      background: #667eea;
+      color: white;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    .btn:hover {
+      background: #5a67d8;
+    }
+
+    .btn:disabled {
+      opacity: 0.7;
+      cursor: wait;
+    }
+
+    .error {
+      color: #dc2626;
+      font-size: 12px;
+      margin-top: 5px;
+      display: none;
+    }
+
+    .status {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 14px;
+      display: none;
+    }
+
+    .status.success {
+      color: #047857;
+    }
+
+    .status.error {
+      color: #b91c1c;
+    }
+
+    .extra {
+      margin-top: 18px;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .extra a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Login</h2>
+
+    <div class="input-group">
+      <label for="email">Email</label>
+      <input type="email" id="email" placeholder="Enter your email" />
+      <div class="error" id="emailError">Please enter a valid email</div>
+    </div>
+
+    <div class="input-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="Enter your password" />
+      <div class="error" id="passwordError">Password must be at least 6 characters</div>
+    </div>
+
+    <button class="btn" id="loginBtn" onclick="login()">Login</button>
+    <div class="status" id="statusMessage"></div>
+
+    <div class="extra">
+      <p><a href="#" onclick="handleForgotPassword(event)">Forgot Password?</a></p>
+      <p>Don't have an account? <a href="/signup">Sign up</a></p>
+      <p style="margin-top: 8px;"><a href="/">Back to home</a></p>
+    </div>
+  </div>
+
+  <script>
+    async function login() {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const emailError = document.getElementById('emailError');
+      const passwordError = document.getElementById('passwordError');
+      const statusMessage = document.getElementById('statusMessage');
+      const loginBtn = document.getElementById('loginBtn');
+
+      emailError.style.display = email.includes('@') ? 'none' : 'block';
+      passwordError.style.display = password.length >= 6 ? 'none' : 'block';
+
+      if (!email.includes('@') || password.length < 6) {
+        return;
+      }
+
+      statusMessage.style.display = 'none';
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Checking account...';
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email, password })
+        });
+
+        const raw = await response.text();
+        let data = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          data = { detail: raw || 'Unexpected server response' };
+        }
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Login failed');
+        }
+
+        if (data.requires_verification) {
+          throw new Error('Server is using old login verification flow. Restart backend and try again.');
+        }
+
+        if (!data.user) {
+          throw new Error(data.message || 'Login succeeded but user details were missing.');
+        }
+
+        if (window.TailorCVAuth) {
+          window.TailorCVAuth.saveUser(data.user);
+        }
+
+        statusMessage.textContent = `Welcome back, ${data.user.name}!`;
+        statusMessage.className = 'status success';
+        statusMessage.style.display = 'block';
+        setTimeout(() => {
+          window.location.href = '/solutions';
+        }, 900);
+      } catch (error) {
+        statusMessage.textContent = error.message;
+        statusMessage.className = 'status error';
+        statusMessage.style.display = 'block';
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Login';
+      }
+    }
+
+    async function handleForgotPassword(event) {
+      event.preventDefault();
+
+      const email = document.getElementById('email').value.trim();
+      const statusMessage = document.getElementById('statusMessage');
+
+      if (!email.includes('@')) {
+        statusMessage.textContent = 'Enter your registered email first, then click Forgot Password.';
+        statusMessage.className = 'status error';
+        statusMessage.style.display = 'block';
+        return;
+      }
+
+      statusMessage.textContent = 'Preparing reset code...';
+      statusMessage.className = 'status success';
+      statusMessage.style.display = 'block';
+
+      try {
+        const response = await fetch('/api/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email })
+        });
+
+        const raw = await response.text();
+        let data = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          data = { detail: raw || 'Unexpected server response' };
+        }
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Could not send reset code');
+        }
+
+        const backendMessage = data.message || 'Reset code prepared.';
+        statusMessage.textContent = backendMessage;
+        statusMessage.className = 'status success';
+        statusMessage.style.display = 'block';
+
+        const resetUrl = `/reset-password?email=${encodeURIComponent(email)}`;
+
+        setTimeout(() => {
+          window.location.href = resetUrl;
+        }, 1000);
+      } catch (error) {
+        statusMessage.textContent = error.message;
+        statusMessage.className = 'status error';
+        statusMessage.style.display = 'block';
+      }
+    }
+  </script>
+  <script src="/static/auth_nav.js"></script>
+</body>
+</html>

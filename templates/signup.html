@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {% include "_google_analytics.html" %}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: url('/static/back5.jpg') center/cover no-repeat fixed;
+    }
+
+    .container {
+      width: min(400px, 92vw);
+      background: rgba(255, 255, 255, 0.98);
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      background: #667eea;
+      color: white;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    .btn:hover {
+      background: #5a67d8;
+    }
+
+    .btn.secondary {
+      background: #334155;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+
+    .btn.secondary:hover {
+      background: #1e293b;
+    }
+
+    .btn:disabled {
+      opacity: 0.7;
+      cursor: wait;
+    }
+
+    .error {
+      color: #dc2626;
+      font-size: 12px;
+      margin-top: 5px;
+      display: none;
+    }
+
+    .status {
+      margin-top: 14px;
+      text-align: center;
+      font-size: 14px;
+      display: none;
+    }
+
+    .status.success {
+      color: #047857;
+    }
+
+    .status.error {
+      color: #b91c1c;
+    }
+
+    .extra {
+      margin-top: 18px;
+      text-align: center;
+      font-size: 14px;
+    }
+
+    .extra a {
+      color: #667eea;
+      text-decoration: none;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Create Account</h2>
+
+    <div class="input-group">
+      <label for="name">Full Name</label>
+      <input type="text" id="name" placeholder="Enter your full name" />
+      <div class="error" id="nameError">Name must be at least 2 characters</div>
+    </div>
+
+    <div class="input-group">
+      <label for="email">Email</label>
+      <input type="email" id="email" placeholder="Enter your email" />
+      <div class="error" id="emailError">Please enter a valid email</div>
+    </div>
+
+    <div class="input-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="Create a password" />
+      <div class="error" id="passwordError">Password must be at least 6 characters</div>
+    </div>
+
+    <button class="btn secondary" id="sendCodeBtn" onclick="sendSignupCode()">Send Verification Code</button>
+
+    <div class="input-group" id="codeGroup" style="display: none;">
+      <label for="signupCode">Verification Code</label>
+      <input type="text" id="signupCode" placeholder="Enter code from your email" />
+      <div class="error" id="codeError">Please enter the verification code</div>
+    </div>
+
+    <button class="btn" id="signupBtn" onclick="signup()">Verify Email & Sign Up</button>
+    <div class="status" id="statusMessage"></div>
+
+    <div class="extra">
+      <p>Already have an account? <a href="/login">Login</a></p>
+      <p style="margin-top: 8px;"><a href="/">Back to home</a></p>
+    </div>
+  </div>
+
+  <script>
+    let codeRequested = false;
+
+    function validateSignupFields() {
+      const name = document.getElementById('name').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const nameError = document.getElementById('nameError');
+      const emailError = document.getElementById('emailError');
+      const passwordError = document.getElementById('passwordError');
+
+      nameError.style.display = name.length >= 2 ? 'none' : 'block';
+      emailError.style.display = email.includes('@') ? 'none' : 'block';
+      passwordError.style.display = password.length >= 6 ? 'none' : 'block';
+
+      return {
+        name,
+        email,
+        password,
+        valid: name.length >= 2 && email.includes('@') && password.length >= 6,
+      };
+    }
+
+    async function sendSignupCode() {
+      const statusMessage = document.getElementById('statusMessage');
+      const sendCodeBtn = document.getElementById('sendCodeBtn');
+      const codeGroup = document.getElementById('codeGroup');
+      const signupBtn = document.getElementById('signupBtn');
+      const { email, valid } = validateSignupFields();
+
+      if (!valid) {
+        return;
+      }
+
+      statusMessage.style.display = 'none';
+      sendCodeBtn.disabled = true;
+      sendCodeBtn.textContent = 'Sending code...';
+
+      try {
+        const response = await fetch('/api/signup/request-code', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Could not send verification code');
+        }
+
+        codeRequested = true;
+        codeGroup.style.display = 'block';
+        signupBtn.textContent = 'Verify Email & Sign Up';
+
+        statusMessage.textContent = data.message || 'Verification code sent. Check your email.';
+        statusMessage.className = 'status success';
+        statusMessage.style.display = 'block';
+      } catch (error) {
+        statusMessage.textContent = error.message;
+        statusMessage.className = 'status error';
+        statusMessage.style.display = 'block';
+      } finally {
+        sendCodeBtn.disabled = false;
+        sendCodeBtn.textContent = codeRequested ? 'Resend Verification Code' : 'Send Verification Code';
+      }
+    }
+
+    async function signup() {
+      const { name, email, password, valid } = validateSignupFields();
+      const code = document.getElementById('signupCode').value.trim();
+      const codeError = document.getElementById('codeError');
+      const statusMessage = document.getElementById('statusMessage');
+      const signupBtn = document.getElementById('signupBtn');
+
+      if (!valid) {
+        return;
+      }
+
+      if (!codeRequested) {
+        statusMessage.textContent = 'Click "Send Verification Code" first.';
+        statusMessage.className = 'status error';
+        statusMessage.style.display = 'block';
+        return;
+      }
+
+      codeError.style.display = code ? 'none' : 'block';
+      if (!code) {
+        return;
+      }
+
+      statusMessage.style.display = 'none';
+      signupBtn.disabled = true;
+      signupBtn.textContent = 'Verifying...';
+
+      try {
+        const response = await fetch('/api/signup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ name, email, password, code })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.detail || 'Signup failed');
+        }
+
+        statusMessage.textContent = 'Account created successfully. Redirecting to login...';
+        statusMessage.className = 'status success';
+        statusMessage.style.display = 'block';
+
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1400);
+      } catch (error) {
+        statusMessage.textContent = error.message;
+        statusMessage.className = 'status error';
+        statusMessage.style.display = 'block';
+      } finally {
+        signupBtn.disabled = false;
+        signupBtn.textContent = 'Verify Email & Sign Up';
+      }
+    }
+  </script>
+</body>
+</html>

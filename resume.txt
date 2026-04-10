@@ -1,0 +1,3 @@
+A Front-End Developer builds the user-facing, interactive components of websites and applications using HTML, CSS, and JavaScript. They bridge design and technology, translating UI/UX mockups into responsive, high-performance, and accessible web interfaces. Key duties include optimizing application speed, ensuring cross-browser compatibility, and collaborating with back-end teams to integrate APIs.
+
+

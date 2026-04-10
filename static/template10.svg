@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="1100" viewBox="0 0 800 1100">
+  <rect width="800" height="1100" rx="28" fill="#f4f7fb"/>
+  <rect x="0" y="0" width="530" height="1100" rx="28" fill="#ffffff"/>
+  <rect x="530" y="0" width="270" height="1100" rx="28" fill="#26384a"/>
+  <rect x="40" y="36" width="450" height="92" rx="18" fill="#f1f5f9"/>
+  <text x="70" y="92" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" fill="#1f2937">Template 10</text>
+  <text x="70" y="120" font-family="Arial, Helvetica, sans-serif" font-size="16" fill="#5d6878">Slate Sidebar</text>
+  <circle cx="665" cy="110" r="46" fill="#9cc4df"/>
+  <text x="665" y="120" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#26384a">CV</text>
+</svg>
